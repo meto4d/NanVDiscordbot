@@ -38,30 +38,34 @@ else:
             "token": "test channel token",
             "id": 000000, #INT server id
             "channel": 000000, #INT channel id
-            "socket_port": 00000 #INT socket port
+            "socket_port": 10000 #INT socket port
         },
         # production
         "prod": {
             "token": "production channel token",
             "id": 000000, #INT server id
             "channel": 000000, #INT channel id
-            "socket_port": 00000 #INT socket port
+            "socket_port": 20000 #INT socket port
         },
+        #signature
         "sign": "signature",
+        #help
         "help": "help string",
         "help_embed": {
             "title": "help embed title",
             "desp": ["help embed description"]
         },
+        # connect kagamin
         "okiba": {
             "url": "http://localhost:8000",
-            "ports": [8080]
+            "port": [8080]
         },
-        # connect kagamin list
+        # receive kagamin list
         "conKgm": {
-            # "receive": ["name", "url"],
+            # "receive name": ["server name", "url"],
             "local": ["name", "localhost"],
         },
+        #2ch API proxy key
         "chAPI": {
             "AppKey": "",
             "HMKey": "",
@@ -69,6 +73,7 @@ else:
             "X2chUA": "",
             "dat_UA": ""
         },
+        #Voice Text API key
         "VoiceTextAPI": {
             "token": "VoiceTextWebAPI token",
             "dir": "directory saving datas from VoiceTextWebAPI",
@@ -127,6 +132,9 @@ async def on_message(message):
             reply = f'{message.author.mention} コマンドが認識できませんでした'
             await client.send_message(message.channel, reply)
 
+###################
+#
+###################
 
 # 特定の鯖でメンションが来たとき
 async def KgmMention(msg, cl):
@@ -143,11 +151,6 @@ async def KgmMention(msg, cl):
             await HelpMsg(msg, cl)
             return True
     return False
-
-
-###################
-#
-###################
 
 # Help
 async def HelpMsg(msg, cl):

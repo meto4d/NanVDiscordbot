@@ -50,8 +50,8 @@ else:
         "sign": "signature",
         "help": "help string",
         "help_embed": {
-            "title", "help embed title",
-            "desp", ["help embed description"]
+            "title": "help embed title",
+            "desp": ["help embed description"]
         },
         "okiba": {
             "url": "http://localhost:8000",

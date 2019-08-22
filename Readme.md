@@ -12,13 +12,20 @@ python3で作成してpython3で動作確認等したけど、他で動くかは
 pythonが動作する環境と、
 設定等を記載した`account.json`を作成・編集すればOK
 
+一応初回起動時にaccount.json新規作成機能があり、27行目付近
+```python
+# 設定ファイル.json
+setting_json = "./account.json"
+```
+を編集すれば好きな名前で保存できます。
+
 最低限discordライブラリは別途インストール必須です。
 
 > pip install discord
 
 インストールすれば、
 
-> python discord.py
+> python discordbot.py
 
 で動作します。
 

@@ -1,3 +1,11 @@
+testbot.py
+testbot_.py
+copy.sh
+account.json
+account_.json
+setting.json
+.vscode/
+
 # Windows thumbnail cache files
 Thumbs.db
 ehthumbs.db

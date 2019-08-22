@@ -1,41 +1,25 @@
-# VoiceTextShowKun
+# なん実V DiscordBot
 ----
 
 ## How about this
 
-ショー君に代表される、HOYA株式会社による音声合成VoiceTextの[WebAPI](https://cloud.voicetext.jp/webapi)をpythonで使えるようにしたもの
-
-もともとDiscordBotで動作し、URLリンクの公開や再生を行っていたものを少し整理して、クラス化して公開
-
-そのせいでちょっとだけ変なとこはあります
+なんでも実況Vの非公式Discordチャンネル上で動作しているとあるBotのソースコード
 
 python3で作成してpython3で動作確認等したけど、他で動くかはわからないです
 
 ## How to use
 
-apikeyに[VoiceTextWebAPI](https://cloud.voicetext.jp/webapi)から提供されたAPIキーを入力すると使えます。
+pythonが動作する環境と、
+設定等を記載した`account.json`を作成・編集すればOK
 
-コンストラクタ`VTWA(apikey)`でAPIの準備ができて、
-喋って欲しい文字列を`SetVTWA()`メソッドに代入し、
-`getfile()`メソッドに代入した文字列で音声ファイルが保存されます
+**Linux**環境を推奨しています。
 
-`SetVTWA()`メソッドは以下のキーワード引数があり、フォーマットやショー君以外のボイスに変更等できます。
-なお、読むテキストはAPI制限的に200以下でなければエラーが帰ってきます
+**Windows**環境でも動きそうですが、文字コードの問題で動作しなかったのは確認しています。
 
-基本的にはAPIマニュアル通りです
-- fmat="wav"  
-フォーマット `wav` `mp3` `ogg` に対応しています
-- speaker="show"
-話者一覧　`show` `haruka` `hikari` `takeru` `santa` `bear` の6人が選択できます
-- emotion=""
-感情一覧 `(なし)` `happiness` `anger` `sadness` の4つが選択できます(話者show以外)
-- emotion_level=2
-感情のレベルで`1～4`が選択できます
-- pitch_level=100
-声の高低を指定できます　小さいほど低くなります
-- speed_level=100
-話す速度を指定できます　小さいほど遅くなります
-- volume_level=100
-音量を指定します　小さいほど小さくなります
+### その他
 
-`GetFile()`メソッドはdirnameのキーワード引数で保存先フォルダが指定できます
+下の方にある2ch読み込みはテストで入れて、動作しないことを確認したまま放置しています。
+
+鏡置き場から接続通知が来た際に、ソケット通信にて受け取り、discord上に投稿するカタチを取っていますが、
+雑実装なので、めちゃプロセス立ち上げて重いと思います。
+誰か直して

@@ -24,10 +24,6 @@ asyncLoop = asyncio.get_event_loop()
 # test:True
 _Debug = False
 
-# ソケット通信接続待ちポート
-port = 50505
-_Debug_port = 55555
-
 # 設定ファイル.json
 setting_json = "./account.json"
 
@@ -41,13 +37,15 @@ else:
         "test": {
             "token": "test channel token",
             "id": 000000, #INT server id
-            "channel": 000000 #INT channel id
+            "channel": 000000, #INT channel id
+            "socket_port": 00000 #INT socket port
         },
         # production
         "prod": {
             "token": "production channel token",
             "id": 000000, #INT server id
-            "channel": 000000 #INT channel id
+            "channel": 000000, #INT channel id
+            "socket_port": 00000 #INT socket port
         },
         "sign": "signature",
         "help": "help string",
@@ -434,7 +432,7 @@ class KgmOkibaSocket(threading.Thread):
     async def _run(self):
         global socketData
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("localhost", _Debug_port if _Debug else port))
+            s.bind(("localhost", df["test" if _Debug else "prod"]["socket_port"]))
             s.listen(10)
             while True:
                 try:

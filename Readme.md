@@ -3,14 +3,18 @@
 
 ## How about this
 
-なんでも実況Vの非公式Discordチャンネル上で動作しているとあるBotのソースコード
+なんでも実況Vの非公式Discordチャンネル上で動作しているとあるBotのソースコード。
 
-python3で作成してpython3で動作確認等したけど、他で動くかはわからないです
+python3で作成してpython3で動作確認等したけど、他で動くかはわからないです。
 
 ## How to use
 
 pythonが動作する環境と、
 設定等を記載した`account.json`を作成・編集すればOK
+
+> python discord.py
+
+で動作します。
 
 **Linux**環境を推奨しています。
 

@@ -12,6 +12,12 @@ python3で作成してpython3で動作確認等したけど、他で動くかは
 pythonが動作する環境と、
 設定等を記載した`account.json`を作成・編集すればOK
 
+最低限discordライブラリは別途インストール必須です。
+
+> pip install discord
+
+インストールすれば、
+
 > python discord.py
 
 で動作します。

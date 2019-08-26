@@ -1,9 +1,9 @@
 testbot.py
 testbot_.py
+mindiscordbot.py
 copy.sh
-account.json
-account_.json
-setting.json
+*.json
+*.sqlite3
 .vscode/
 
 # Windows thumbnail cache files

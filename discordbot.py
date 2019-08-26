@@ -28,6 +28,7 @@ _Debug = False
 setting_json = "./account.json"
 
 # トークンjson読み込み
+df = {}
 if os.path.isfile(setting_json):
     with open(setting_json) as f:
         df = json.load(f)
@@ -47,13 +48,17 @@ else:
             "channel": 000000, #INT channel id
             "socket_port": 20000 #INT socket port
         },
+        # Sqlite3
+        "sqlite3": "./discordbot.sqlite3",
         #signature
         "sign": "signature",
         #help
-        "help": "help string",
-        "help_embed": {
-            "title": "help embed title",
-            "desp": ["help embed description"]
+        "help": {
+            "title": "help string",
+            "embed": {
+                "title": "help embed title",
+                "desp": ["help embed description"] #Array for new lines
+            }
         },
         # connect kagamin
         "okiba": {
@@ -83,6 +88,11 @@ else:
     with open(setting_json, mode='w') as f:
         json.dump(df, f, indent=4, ensure_ascii=False)
 
+if not df:
+    print("setting file is incorrect. please check 'setting_json':{setting_json}")
+    sys.exit()
+
+# Discord token
 auth_token = df['test' if _Debug else 'prod']['token']
 
 # 更新日時
@@ -91,9 +101,19 @@ update_date = str(datetime.datetime.fromtimestamp(os.stat(__file__).st_ctime))[:
 print('ログイン中...')
 client = discord.Client() #接続に使用するオブジェクト
 
-# socket data
+# Socket data
 socketData = ""
 socketFlag = True
+
+# DB sqlite
+sql = sqlite3.connect(df["sqlite3"])
+sqltable = "vtwa"
+sqlc = sql.cursor()
+sqlc.execute(f"CREATE TABLE IF NOT EXISTS {sqltable} (name text, date integer, long integer)")
+# TABLE vtwa
+# name: TEXT
+# data: INT
+# long: INT(BOOL)
 
 # 起動時に通知してくれる処理
 @client.event
@@ -154,9 +174,9 @@ async def KgmMention(msg, cl):
 
 # Help
 async def HelpMsg(msg, cl):
-    s = parseHelp(df['help'], msg, cl)
-    title = parseHelp(df['help_embed']['title'], msg, cl)
-    des = parseHelp("\n".join(df['help_embed']['desp']), msg, cl)
+    s = parseHelp(df['help']['title'], msg, cl)
+    title = parseHelp(df['help']['embed']['title'], msg, cl)
+    des = parseHelp("\n".join(df['help']['embed']['desp']), msg, cl)
     em = discord.Embed(title=title, description=des)
     await cl.send_message(msg.channel, s, embed=em)
 
@@ -202,7 +222,8 @@ async def VoiceTextShowKun(msg, cl):
     pattern = r"^/(show|haruka|hikari|takeru|santa|bear)kun(\s+)(.+)"
     matchOB = re.match(pattern, msg.content, re.IGNORECASE)
     if matchOB:
-        text = matchOB.group(2)
+        text = matchOB.group(3)
+        print(text)
         if(len(text) > 200):
             await cl.send_message(msg.channel, "200文字以下にしてください")
         else:
@@ -217,31 +238,50 @@ async def ShowkunBasic(disc, t, sp="show", fm="mp3"):
     fmat = "format=" + fm
 
     url += "?" + text + "&" + speak + "&" + fmat
-    res = await BasicReq(df['VoiceTextAPI'], "", url, disc[0].send_message, disc[1].channel)
+    print(url)
+    res = await BasicReq(df['VoiceTextAPI']['token'], "", url, disc[0].send_message, disc[1].channel)
     if res != b'':
         await ShowkunSaveEnc(disc, res)
 
 
 # ショー君 wave file 保存+エンコ(+日時削除)
 async def ShowkunSaveEnc(disc, res):
-    name = randomname(2)
+    name = uniqueName(2)
+    print(f"name: {name}")
     fname = df["VoiceTextAPI"]["dir"]
     mp3name = fname + name + ".mp3"
     # fname += name +".wav"
-    with open(mp3name, mode="wb") as f:
-        f.write(res)
+    with open(mp3name, mode="wb") as fmp3:
+        fmp3.write(res)
 
     await ShowkunSendURL(disc, name)
 
 # ショー君 wave file URL送信
 async def ShowkunSendURL(disc, name):
-    #n = name.split('.')
     url = df["VoiceTextAPI"]["server_url"].replace("<name>", name)
     ## 自動削除タスクを追加
     # autorm(name)
 
     await disc[0].send_message(disc[1].channel, url)
 
+def uniqueName(num):
+    name = randomname(num)
+    sqlc.execute(f"SELECT * FROM {sqltable} where name='{name}'")
+    fetchone = sqlc.fetchone()
+    date = int(datetime.datetime.now().timestamp())
+    if fetchone:
+        if date > fetchone[1] + 60 * 60 * 24 * 7:
+            long_ = 1 if num == 3 else 0
+            sqlc.execute(f"UPDATE {sqltable} SET date = {date} WHERE name = '{name}'")
+            sql.commit()
+            return name
+
+        uniqueName(num)
+    else:
+        long_ = 1 if num == 3 else 0
+        sqlc.execute(f"INSERT INTO {sqltable} VALUES ('{name}', {date}, {long_})")
+        sql.commit()
+        return name
 
 # カウントダウン
 #async def CountDown(message, cl):

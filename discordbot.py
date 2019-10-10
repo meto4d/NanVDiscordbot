@@ -385,8 +385,9 @@ async def WaitSocketData():
 # bot用チャンネルに鏡情報を送信
 async def sendNanV(Msg, enc = 0):
     okiba = df['conKgm']
-    guild = discord.Guild(id=df['test' if _Debug else 'prod']['id'])
-    channel = discord.Channel(id=df['test' if _Debug else 'prod']['channel'], server=guild)
+    #guild = discord.Guild(id=df['test' if _Debug else 'prod']['id'])
+    #channel = discord.Channel(id=df['test' if _Debug else 'prod']['channel'], server=guild)
+    channel = client.get_channel(df['test' if _Debug else 'prod']['channel'])
     #print('Msg: '+Msg)
     #await asyncio.sleep(1)
     for m in Msg.split():

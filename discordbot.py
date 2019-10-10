@@ -120,16 +120,16 @@ sqlc.execute(f"CREATE TABLE IF NOT EXISTS {sqltable} (name text, date integer, l
 async def on_ready():
     print(client.user.name + " " + str(client.user.id))
     print('ログインしました')
-    asyncLoop.create_task( LoopRuth(client.send_message))
+    asyncLoop.create_task( WaitSocketData())
 
 # メッセージを受信したときの処理
 @client.event
 async def on_message(message):
     # steamURL が発言されたら steam:// でURLを返す処理
-    asyncLoop.create_task( SteamLink(message, client) )
-    asyncLoop.create_task( DiceRoll(message, client) )
-    asyncLoop.create_task( VoiceTextShowKun(message, client) )
-    #asyncLoop.create_task( CountDown(message, client) )
+    asyncLoop.create_task( SteamLink(message) )
+    asyncLoop.create_task( DiceRoll(message) )
+    asyncLoop.create_task( VoiceTextShowKun(message) )
+    #asyncLoop.create_task( CountDown(message) )
     #asyncLoop.create_task( testLogs(message, client))
 
     ## メッセージを消すテスト
@@ -145,12 +145,12 @@ async def on_message(message):
     #   await client.edit_message(message, "/edited")
 
     # 行頭でメンションが来たときの処理
-    if message.content.startswith("<@"+client.user.id+">"):
+    if message.content.startswith(f"<@{client.user.id}>"):
         if (await KgmMention(message, client)):
             pass
         else:
             reply = f'{message.author.mention} コマンドが認識できませんでした'
-            await client.send_message(message.channel, reply)
+            await message.channel.send(reply)
 
 ###################
 #
@@ -159,13 +159,13 @@ async def on_message(message):
 # 特定の鯖でメンションが来たとき
 async def KgmMention(msg, cl):
     server_id = df['test' if _Debug else 'prod']['id']
-    if (int(msg.server.id) == server_id):
+    if (int(msg.guild.id) == server_id):
         kgmPtrn = r"(かがみ|カガミ|鏡|鑑|加賀美|加々美|ｋａｇａｍｉ|ＫＡＧＡＭＩ|kagami)"
         kgmMatch = re.search(kgmPtrn, msg.content, re.IGNORECASE)
         helpPtrn = r"(help|(へ|ヘ)(る|ル)(ぷ|プ))"
         helpMatch = re.search(helpPtrn, msg.content, re.IGNORECASE)
         if kgmMatch:
-            await Kagami(msg, cl)
+            await Kagami(msg)
             return True
         elif helpMatch:
             await HelpMsg(msg, cl)
@@ -178,29 +178,29 @@ async def HelpMsg(msg, cl):
     title = parseHelp(df['help']['embed']['title'], msg, cl)
     des = parseHelp("\n".join(df['help']['embed']['desp']), msg, cl)
     em = discord.Embed(title=title, description=des)
-    await cl.send_message(msg.channel, s, embed=em)
+    await msg.channel.send(s, embed=em)
 
 def parseHelp(src, msg, cl):
-    return src.replace("<date>", update_date).replace("<id>", cl.user.id)
+    return src.replace("<date>", str(update_date)).replace("<id>", str(cl.user.id))
 
 # Steam Link 書き換え
-async def SteamLink(msg, cl):
+async def SteamLink(msg):
     # steamURL が発言されたら steam:// でURLを返す処理
     pattern = r"^https?://.+steampowered\.com/([\w./?%&=]*)?"
     matchOB = re.match(pattern, msg.content, re.IGNORECASE)
     if matchOB:
         reply = 'steam://openurl/' + matchOB.group()
         em = discord.Embed()
-        await cl.send_message(msg.channel, reply, embed=em)
+        await msg.channel.send(reply, embed=em)
 
 # サイコロ
-async def DiceRoll(msg, cl):
+async def DiceRoll(msg):
     pattern = r"^(\d+)D(\d+)"
     matchOB = re.match(pattern, msg.content, re.IGNORECASE)
     if matchOB:
         num = int(matchOB.group(1))
         if num > 100:
-            await cl.send_message(msg.channel, "101以上は実行できません")
+            await msg.channel.send("101以上は実行できません")
             return
         cube = int(matchOB.group(2))
         randsum = 0
@@ -215,23 +215,22 @@ async def DiceRoll(msg, cl):
         randlist = randlist[:len(randlist) - 1]
         randlist += '}'
         em = discord.Embed(description=randlist)
-        await cl.send_message(msg.channel, str(randsum), embed=em)
+        await msg.channel.send(str(randsum), embed=em)
 
 # ショー君
-async def VoiceTextShowKun(msg, cl):
+async def VoiceTextShowKun(msg):
     pattern = r"^/(show|haruka|hikari|takeru|santa|bear)kun(\s+)(.+)"
     matchOB = re.match(pattern, msg.content, re.IGNORECASE)
     if matchOB:
         text = matchOB.group(3)
         print(text)
         if(len(text) > 200):
-            await cl.send_message(msg.channel, "200文字以下にしてください")
+            await msg.channel.send("200文字以下にしてください")
         else:
-            await ShowkunBasic((cl, msg), urllib.parse.quote(text, encoding='utf-8'))
-         
+            await ShowkunBasic(msg.channel.send, urllib.parse.quote(text, encoding='utf-8'))
 
-# ショー君 API + Basic認証 disc=(cl, msg)
-async def ShowkunBasic(disc, t, sp="show", fm="mp3"):
+# ショー君 API + Basic認証
+async def ShowkunBasic(fnSend, t, sp="show", fm="mp3"):
     url = "https://api.voicetext.jp/v1/tts"
     text = "text=" + t
     speak = "speaker=" + sp
@@ -239,13 +238,12 @@ async def ShowkunBasic(disc, t, sp="show", fm="mp3"):
 
     url += "?" + text + "&" + speak + "&" + fmat
     print(url)
-    res = await BasicReq(df['VoiceTextAPI']['token'], "", url, disc[0].send_message, disc[1].channel)
+    res = await BasicReq(df['VoiceTextAPI']['token'], "", url, fnSend)
     if res != b'':
-        await ShowkunSaveEnc(disc, res)
-
+        await ShowkunSaveEnc(fnSend, res)
 
 # ショー君 wave file 保存+エンコ(+日時削除)
-async def ShowkunSaveEnc(disc, res):
+async def ShowkunSaveEnc(fnSend, res):
     name = uniqueName(2)
     print(f"name: {name}")
     fname = df["VoiceTextAPI"]["dir"]
@@ -254,16 +252,17 @@ async def ShowkunSaveEnc(disc, res):
     with open(mp3name, mode="wb") as fmp3:
         fmp3.write(res)
 
-    await ShowkunSendURL(disc, name)
+    await ShowkunSendURL(fnSend, name)
 
 # ショー君 wave file URL送信
-async def ShowkunSendURL(disc, name):
+async def ShowkunSendURL(fnSend, name):
     url = df["VoiceTextAPI"]["server_url"].replace("<name>", name)
     ## 自動削除タスクを追加
     # autorm(name)
 
-    await disc[0].send_message(disc[1].channel, url)
+    await fnSend(url)
 
+# ユニークネーム設定
 def uniqueName(num):
     name = randomname(num)
     sqlc.execute(f"SELECT * FROM {sqltable} where name='{name}'")
@@ -284,23 +283,23 @@ def uniqueName(num):
         return name
 
 # カウントダウン
-#async def CountDown(message, cl):
+#async def CountDown(msg):
 #    pattern = r"^カウントダウン"
-#    matchOB = re.search(pattern, message.content, re.IGNORECASE)
+#    matchOB = re.search(pattern, msg.content, re.IGNORECASE)
 #if matchOB:
 #        for i in range(10000):
-#            await cl.send_message(message.author, str(10000 - i))
+#            await msg.author.send(str(10000 - i))
 #            await asyncio.sleep(10)
 
 # 鏡を借りる
-async def Kagami(msg, cl):
+async def Kagami(msg):
     kgmPtrn = r"(http|mms).?://.*:\d+.?(\s|　)*"
     kgmPush = r"(push|プッ?シュ|ぷっ?しゅ|(ｐ|Ｐ)(ｕ|Ｕ)(ｓ|Ｓ)(ｈ|Ｈ)|ぷｓｈ)(\s|　)*"
     forceConn = r"^(force|f)"
     kgmForce = True if re.search(forceConn, msg.content, re.IGNORECASE) else False
 
     kgmMatch = re.search(kgmPtrn, msg.content, re.IGNORECASE)
-    port_str = str(df["okiba"]["port"])
+    port_str = str(df["okiba"]["port"][0])
     kagami = urllib.parse.urlparse(df["okiba"]["url"])
     kagami = kagami.scheme + "://" + kagami.hostname + ":"
 
@@ -311,14 +310,13 @@ async def Kagami(msg, cl):
         kgmUrl = await KgmUrl(port_str, True, password, comment, msg.author.name, url=kgmMatch.group(0), force=kgmForce)
         if(_Debug):
             em = discord.Embed(title=kgmMatch.group(0) + "\n┗"+kagami+port_str, description=kgmUrl)
-            ##await KgmHTTP(kgmUrl, msg.channel, cl.send_message, kgmForce)
-            await cl.send_message(msg.channel, comment, embed=em)
+            await msg.channel.send(comment, embed=em)
         else:
-            await KgmHTTP(kgmUrl, msg.channel, cl.send_message)
+            await KgmHTTP(kgmUrl, msg.channel.send)
             # DM 送信
-            await cl.send_message(msg.author, DmMsg(port_str, password))
+            await msg.author.send(DmMsg(port_str, password))
             em = discord.Embed(title=kgmMatch.group(0) + "\n┗"+kagami+port_str)
-            await cl.send_message(msg.channel, "鏡を " + kgmMatch.group(0) + " に接続しました\nパスワードと接続設定はDMを確認してください", embed=em)
+            await msg.channel.send("鏡を " + kgmMatch.group(0) + " に接続しました\nパスワードと接続設定はDMを確認してください", embed=em)
     else:
         # push待機
         kgmMatch = re.search(kgmPush, msg.content, re.IGNORECASE)
@@ -329,16 +327,16 @@ async def Kagami(msg, cl):
 
             if(_Debug):
                 em = discord.Embed(title="push\n"+kagami+port_str, description=kgmUrl)
-                await cl.send_message(msg.channel, comment, embed=em)
+                await msg.channel.send(comment, embed=em)
             else:
-                await KgmHTTP(kgmUrl, msg.channel, cl.send_message)
+                await KgmHTTP(kgmUrl, msg.channel.send)
                 # DM 送信
                 em = discord.Embed(title="push\n"+kagami+port_str)
-                await cl.send_message(msg.author, DmMsg(port_str, password))
+                await msg.author.send(DmMsg(port_str, password))
 
-                await cl.send_message(msg.channel, "鏡をpush待機させました\nパスワードと接続設定はDMを確認してください", embed=em)
+                await msg.channel.send("鏡をpush待機させました\nパスワードと接続設定はDMを確認してください", embed=em)
         else:
-            await cl.send_message(msg.channel, "urlが判別できませんでした")
+            await msg.channel.send("urlが判別できませんでした")
 
 # 鏡接続URL文字列を作成
 async def KgmUrl(port, pushll, ps, com, usr, url = "", force = False):
@@ -364,16 +362,16 @@ def DmMsg(port, ps):
     return msg
 
 # 鏡置き場HTTP接続部
-async def KgmHTTP(url, ch, SendMsg):
+async def KgmHTTP(url, fnSendMsg):
     try:
         res = urllib.request.urlopen(url, timeout=1).read()
     except (urllib.request.HTTPError, urllib.request.URLError) as error:
-        await SendMsg(ch, error + "によってデータ取得に失敗しました")
+        await fnSendMsg(ch, error + "によってデータ取得に失敗しました")
     except timeout:
-        await SendMsg(ch, "タイムアウトしました")
+        await fnSendMsg(ch, "タイムアウトしました")
 
-# Loop DM to Ruth
-async def LoopRuth(fnSend):
+# Wait for Socket data
+async def WaitSocketData():
     global socketData
     global socketFlag
     if socketFlag:
@@ -381,14 +379,14 @@ async def LoopRuth(fnSend):
         while True:
             await asyncio.sleep(10)
             if socketData != "":
-                await sendNanV(fnSend, socketData)
+                await sendNanV(socketData)
                 socketData = ""
 
 # bot用チャンネルに鏡情報を送信
-async def sendNanV(fnSend, Msg, enc = 0):
+async def sendNanV(Msg, enc = 0):
     okiba = df['conKgm']
-    ser = discord.Server(id=df['test' if _Debug else 'prod']['id'])
-    server = discord.Channel(id=df['test' if _Debug else 'prod']['channel'], server=ser)
+    guild = discord.Guild(id=df['test' if _Debug else 'prod']['id'])
+    channel = discord.Channel(id=df['test' if _Debug else 'prod']['channel'], server=guild)
     #print('Msg: '+Msg)
     #await asyncio.sleep(1)
     for m in Msg.split():
@@ -433,7 +431,7 @@ async def sendNanV(fnSend, Msg, enc = 0):
             ems += "┗http://"+(okiba[sendMsg['server']][1] if sendMsg['server'] in okiba.keys() else "localhost")
             ems += ":"+sendMsg['port']+"\n"
             em = discord.Embed(title=sendMsg['comment'], description=ems)
-            await fnSend(server, msg, embed=em)
+            await channel.send(msg, embed=em)
         elif setMsg == 'dis':
             for llMsg in lMsg:
                 cMsg = llMsg.split('=')
@@ -447,18 +445,18 @@ async def sendNanV(fnSend, Msg, enc = 0):
             ems += okiba[sendMsg['server']][1] if sendMsg['server'] in okiba.keys() else "localhost"
             ems += ":" + sendMsg['port']
             em = discord.Embed(title="切断", description=ems)
-            await fnSend(server, msg, embed=em)
+            await channel.send(msg, embed=em)
 
 
 # logs_from test
-async def testLogs(msg, cl):
+async def testLogs(msg):
     if msg.content.startswith('!test'):
         counter = 0
-        tmp = await cl.send_message(msg.channel, 'Calculating messages...')
-        async for log in cl.logs_from(msg.channel, limit=100):
+        msg_tmp = await msg.channel.send('Calculating messages...')
+        async for log in msg.channel.history(limit=100):
             if log.author == msg.author:
                 counter += 1
-        await cl.edit_message(tmp, 'You have {} messages.'.format(counter))
+        await msg_tmp.edit('You have {} messages.'.format(counter))
 
 # 鏡借りた時のソケット通信待ち
 class KgmOkibaSocket(threading.Thread):
@@ -523,8 +521,12 @@ def chRead(server, board, thread):
     msg = "/v1/" + server + "/" + board + "/" + thread + sid + AppKey
     hobo = hmac.new(HMKey.encode('ascii'), msg.encode('ascii'), hashlib.sha256).hexdigest()
     dat_url = "https://api.5ch.net" + msg
-    values = {'sid': sid, 'hobo': hobo, 'appkey': AppKey }
-    headers = {'User-Agent': dat_UA, 'Connection': 'close', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept-Encoding': 'gzip'}
+    values = {'sid': sid, 'hobo': hobo, 'appkey': AppKey}
+    headers = {
+        'User-Agent': dat_UA,
+        'Connection': 'close',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept-Encoding': 'gzip'}
     data = urllib.parse.urlencode(values).encode('ascii')
     req = urllib.request.Request(dat_url, data, headers)
     res = urllib.request.urlopen(req)
@@ -536,17 +538,17 @@ def chRead(server, board, thread):
 ###################################
 # Basic認証
 # ref: https://www.yoheim.net/blog.php?q=20181003
-async def BasicReq(user, pas, url, SendMsg, SendPar):
+async def BasicReq(user, pas, url, SendMsg):
     bas = base64.b64encode((user +':'+ pas).encode('utf-8'))
     headers = {"Authorization": "Basic " + bas.decode('utf-8')}
     try:
         req = urllib.request.Request(url, headers=headers, method="POST")
         return urllib.request.urlopen(req).read()
     except urllib.request.HTTPError as e:
-        await SendMsg(SendPar, "HTTP Error "+e.code+ " :"+e.read())
+        await SendMsg("HTTP Error "+e.code+ " :"+e.read())
         return b''
     except (urllib.request.HTTPError, urllib.request.URLError) as error:
-        await SendMsg(SendPar, error + "によってデータ取得に失敗しました")
+        await SendMsg(error + "によってデータ取得に失敗しました")
         return b''
 
 ###################################

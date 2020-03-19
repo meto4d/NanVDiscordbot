@@ -145,7 +145,7 @@ async def on_message(message):
     #   await client.edit_message(message, "/edited")
 
     # 行頭でメンションが来たときの処理
-    if message.content.startswith(f"<@{client.user.id}>"):
+    if message.content.startswith(f"<@!{client.user.id}>"):
         if (await KgmMention(message, client)):
             pass
         else:
@@ -195,7 +195,7 @@ async def SteamLink(msg):
 
 # サイコロ
 async def DiceRoll(msg):
-    pattern = r"^(\d+)D(\d+)"
+    pattern = r"^(\d+)D(\d+)([\s　]*\+[\s　]*(\d+))?([\s　]*-[\s　]*(\d+))?([\s　]*\+[\s　]*(\d+))?"
     matchOB = re.match(pattern, msg.content, re.IGNORECASE)
     if matchOB:
         num = int(matchOB.group(1))
@@ -214,6 +214,15 @@ async def DiceRoll(msg):
                 randlist += '\n'
         randlist = randlist[:len(randlist) - 1]
         randlist += '}'
+        if matchOB.group(3) is not None:
+            randsum += int(matchOB.group(4))
+            randlist += '+' + str(matchOB.group(4))
+        if matchOB.group(5) is not None:
+            randsum -= int(matchOB.group(6))
+            randlist += '-' + str(matchOB.group(6))
+        if matchOB.group(7) is not None:
+            randsum += int(matchOB.group(8))
+            randlist += '+' + str(matchOB.group(8))
         em = discord.Embed(description=randlist)
         await msg.channel.send(str(randsum), embed=em)
 
@@ -385,8 +394,6 @@ async def WaitSocketData():
 # bot用チャンネルに鏡情報を送信
 async def sendNanV(Msg, enc = 0):
     okiba = df['conKgm']
-    #guild = discord.Guild(id=df['test' if _Debug else 'prod']['id'])
-    #channel = discord.Channel(id=df['test' if _Debug else 'prod']['channel'], server=guild)
     channel = client.get_channel(df['test' if _Debug else 'prod']['channel'])
     #print('Msg: '+Msg)
     #await asyncio.sleep(1)

@@ -16,7 +16,177 @@ import socket #ソケット通信
 import threading #スレッド処理
 import base64 # Base64
 import sqlite3 #SQLite
+import tempfile # TempFile (diskに負荷かけない？大丈夫？)
 #import pycurl #curl
+
+# VoiceTextWebAPI用のクラス
+class VoiceTextWebAPI:
+    # VoiceTextWebAPIの基本メンバ
+    apikey = "" #API key for VoiceTextWebAPI
+    path = "" #PATH for save voice data
+    guild = None #discord server's guild
+    text_channels = {} #text channnels object {channel.id: channel.name}
+
+    # VoiceChat用のメンバ
+    vclient = None # Voice Channel client
+    read_channnels = (None, ) # read text channels : tuple
+    playfile = None
+    vc_uptime = None
+    vc_limit_time = 2 * 60 # minutes
+    vc_author = None
+    vc_speaker = "show"
+
+    def __init__(self, apikey, path, guild, limit_time = 2 * 60, speaker="show", ):
+        self.apikey = apikey
+        self.path = path
+        self.guild = guild
+        self.vc_limit_time = limit_time
+        self.vc_speaker = speaker
+
+    # ショー君の音声データを取ってきて、保存し、ファイル名を返す
+    #  通常は拡張子のないファイル名、temp=TrueでTempFileオブジェクトが返る
+    async def GetShowkunDataPath(self, text, fnSend, sp="show", fm="mp3", temp=False):
+        if(fm not in ["mp3", "wav", "ogg"]):
+            return ''
+        res = await BasicReq(self.apikey, "", self.ShowkunURL(text, sp, fm), fnSend)
+        if res != b'':
+            return self.SaveShowkun(res, fm, self.path) if not temp else self.SaveTempShowkun(res)
+        return ''
+
+    # ショー君の音声データを保存
+    def SaveShowkun(self, res, fm, path):
+        # ほぼ後の実装のため（トラフィック量増加などによる重複IDを避けやすいように）
+        name = uniqueName(3 if False else 2)
+        mp3name = path + name + "." + fm
+        # fname += name +".wav"
+        with open(mp3name, mode="wb") as fmp3:
+            fmp3.write(res)
+        return name
+            
+    # ショーくんの音声データを一時ファイルで保存
+    def SaveTempShowkun(self, res):
+        tf = tempfile.TemporaryFile()
+        tf.write(res)
+        tf.seek(0)
+        return tf
+
+    # ShowkunのURLを作成する
+    def ShowkunURL(self, text, speaker, fm):
+        url = "https://api.voicetext.jp/v1/tts"
+        text = "text=" + urllib.parse.quote(self.normTextShowkun(text), encoding='utf-8')
+        speak = "speaker=" + speaker
+        fmat = "format=" + fm
+        url += "?" + text + "&" + speak + "&" + fmat
+        #print(url)
+        return url
+
+    # ショー君に読み込ませる文章を整形し、200文字以下に
+    def normTextShowkun(self, text):
+        # チャンネル名をIDから保管
+        if not self.text_channels :
+            self.text_channels = dict(map(lambda x: [int(x.id), x.name], self.guild.text_channels))
+        text = re.sub(r"<#(\d+)>" , lambda match: (self.text_channels[self.int_parse(match.group(0))] + "チャンネル" ) if self.int_parse(match.group(0)) in self.text_channels else "", text)
+        if len(text) > 191 :
+            text = text[:190] + "。以下省略"
+        return text
+    
+    # int.parse
+    def int_parse(self, string):
+        return int(re.sub(r"\D*(\d+)\D*", "\\1", string))
+
+    # ボイスチャンネルに接続して、準備ができているか
+    def is_ready_vc(self):
+        if self.vclient is None:
+            return False
+        return True
+    
+    # 接続時間制限
+    # connect time than limit time is 1
+    # less than 0
+    # not ready -1
+    def is_limit_time(self):
+        if self.is_ready_vc():
+            now = datetime.datetime.now()
+            if (now - self.vc_uptime).seconds / 60 > self.vc_limit_time:
+                return 1
+            else:
+                return 0
+        return -1
+
+    # ショーくんをVCに召喚する
+    async def connect_vc(self, msg, read_channels, limit_time = 2 * 60):
+        if self.vclient is not None :
+            return -1
+        try:
+            self.vclient = await msg.author.voice.channel.connect()
+        except discord.ClientException as e:
+            msg.channel.send("ボイスチャンネルへの接続に失敗しました。ボイスチャンネルへの参加が可能か、設定を見直してください。")
+            print(e)
+            return
+        except:
+            msg.channel.send("ボイスチャンネルへの接続に失敗しました。ボイスチャンネルへの参加が可能か、設定を見直してください。")
+            return
+        self.read_channels = read_channels
+        self.text_channels = dict(map(lambda x: [int(x.id), x.name], msg.guild.text_channels))
+        self.vc_uptime = datetime.datetime.now()
+        self.vc_limit_time = limit_time
+        self.vc_author = msg.author
+        return 0
+    
+    # ショーくんをVCから切断する
+    async def disconnect_vc(self):
+        if self.vclient is None:
+            return -1
+        await self.playing()
+        await self.vclient.disconnect()
+        self.vclient = None
+        self.read_channels = (None, )
+        self.text_channels = {}
+        self.vc_connect_uptime = None
+        return 0
+
+    # VC内でチャット内容を読み上げる
+    async def play(self, msg):
+        if self.vclient is None:
+            return
+        text = self.vc_normTextShowkun(msg)
+        temp = await self.GetShowkunDataPath(text, msg.channel.send, sp=self.vc_speaker, temp=True)
+        await self.play_file(temp, close=True)
+
+    # VC用の追加パラメータを設定
+    def set_options(self, speaker="show", limit_time= 2 * 60):
+        self.vc_speaker = speaker
+        self.vc_limit_time = limit_time
+
+    # fileをvoice chatで再生する
+    # close = Trueでfileをcloseする
+    async def play_file(self, file, close=False):
+        await self.playing()
+        self.playfile = file
+        self.vclient.play(self.pcmdata(file, close), after= (
+            lambda error: print(error) if error else self.after_play_fn(close))
+        )
+        
+    def after_play_fn(self, close):
+        if close:
+            self.playfile.close()
+
+    # discord.pyで扱えるpcmに変換する
+    def pcmdata(self, file, fileio):
+        return discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(file, pipe=fileio))
+
+    # VC用のテキスト整形
+    def vc_normTextShowkun(self, msg):
+        text = msg.author.name + "、" + msg.content
+        text = self.normTextShowkun(text)
+        return text
+
+    # ショーくんが読み上げ中は待機
+    async def playing(self):
+        while(self.vclient.is_playing()):
+            # wait 1 second
+            await asyncio.sleep(1)
+
 
 # 非同期処理
 asyncLoop = asyncio.get_event_loop()
@@ -26,6 +196,16 @@ _Debug = False
 
 # 設定ファイル.json
 setting_json = "./account.json"
+
+# 検索文字列パターン集（account.jsonに追加したほうがいいか？）
+kgmPattern = r"(かがみ|カガミ|鏡|鑑|加賀美|加々美|ｋａｇａｍｉ|ＫＡＧＡＭＩ|kagami)"
+helpPattern = r"(help|(へ|ヘ)(る|ル)(ぷ|プ))"
+steamPattern = r"^https?://.+steampowered\.com/([\w./?%&=]*)?"
+dicePattern = r"^(\d+)D(\d+)([\s　]*\+[\s　]*(\d+))?([\s　]*-[\s　]*(\d+))?([\s　]*\+[\s　]*(\d+))?"
+showkunPattern = r"^/(show|haruka|hikari|takeru|santa|bear)kun(\s+)(.+)"
+#vcPattern = r"^/vccon(nect)?\s+((#.+)\s?)+$"
+vcPattern = r"^/vccon(nect)?(\s|　)+((<#\d+>\s*)+)$"
+vcdPattern = r"^/vcdis(connect)?"
 
 # トークンjson読み込み
 df = {}
@@ -83,6 +263,10 @@ else:
             "token": "VoiceTextWebAPI token",
             "dir": "directory saving datas from VoiceTextWebAPI",
             "server_url": "publish URL datas from VoiceTextWebAPI"
+        },
+        #OpusLib
+        "OpusLib": {
+            "libPath": "Path to libopus"
         }
     }
     with open(setting_json, mode='w') as f:
@@ -115,10 +299,23 @@ sqlc.execute(f"CREATE TABLE IF NOT EXISTS {sqltable} (name text, date integer, l
 # data: INT
 # long: INT(BOOL)
 
+# VoiceTextWebAPI
+discord.opus.load_opus(df["OpusLib"]["libPath"])
+if not discord.opus.is_loaded():
+    print("Opusライブラリのロードに失敗しました。一部の機能が制限されます。")
+showkun = {}
+showkun_token = df['VoiceTextAPI']['token']
+showkun_dir = df["VoiceTextAPI"]["dir"]
+
 # 起動時に通知してくれる処理
 @client.event
 async def on_ready():
     print(client.user.name + " " + str(client.user.id))
+    # vcshowkun
+    for guild in client.guilds:
+        print(f"connect {guild.name} : {guild.id}")
+        showkun[guild.id] = VoiceTextWebAPI(showkun_token, showkun_dir, guild)
+    print(showkun.keys())
     print('ログインしました')
     asyncLoop.create_task( WaitSocketData())
 
@@ -129,6 +326,7 @@ async def on_message(message):
     asyncLoop.create_task( SteamLink(message) )
     asyncLoop.create_task( DiceRoll(message) )
     asyncLoop.create_task( VoiceTextShowKun(message) )
+    asyncLoop.create_task( ShowkunVoicechat(message) )
     #asyncLoop.create_task( CountDown(message) )
     #asyncLoop.create_task( testLogs(message, client))
 
@@ -153,17 +351,15 @@ async def on_message(message):
             await message.channel.send(reply)
 
 ###################
-#
+# 
 ###################
 
 # 特定の鯖でメンションが来たとき
 async def KgmMention(msg, cl):
     server_id = df['test' if _Debug else 'prod']['id']
     if (int(msg.guild.id) == server_id):
-        kgmPtrn = r"(かがみ|カガミ|鏡|鑑|加賀美|加々美|ｋａｇａｍｉ|ＫＡＧＡＭＩ|kagami)"
-        kgmMatch = re.search(kgmPtrn, msg.content, re.IGNORECASE)
-        helpPtrn = r"(help|(へ|ヘ)(る|ル)(ぷ|プ))"
-        helpMatch = re.search(helpPtrn, msg.content, re.IGNORECASE)
+        kgmMatch = re.search(kgmPattern, msg.content, re.IGNORECASE)
+        helpMatch = re.search(helpPattern, msg.content, re.IGNORECASE)
         if kgmMatch:
             await Kagami(msg)
             return True
@@ -186,8 +382,7 @@ def parseHelp(src, msg, cl):
 # Steam Link 書き換え
 async def SteamLink(msg):
     # steamURL が発言されたら steam:// でURLを返す処理
-    pattern = r"^https?://.+steampowered\.com/([\w./?%&=]*)?"
-    matchOB = re.match(pattern, msg.content, re.IGNORECASE)
+    matchOB = re.match(steamPattern, msg.content, re.IGNORECASE)
     if matchOB:
         reply = 'steam://openurl/' + matchOB.group()
         em = discord.Embed()
@@ -195,8 +390,7 @@ async def SteamLink(msg):
 
 # サイコロ
 async def DiceRoll(msg):
-    pattern = r"^(\d+)D(\d+)([\s　]*\+[\s　]*(\d+))?([\s　]*-[\s　]*(\d+))?([\s　]*\+[\s　]*(\d+))?"
-    matchOB = re.match(pattern, msg.content, re.IGNORECASE)
+    matchOB = re.match(dicePattern, msg.content, re.IGNORECASE)
     if matchOB:
         num = int(matchOB.group(1))
         if num > 100:
@@ -226,79 +420,62 @@ async def DiceRoll(msg):
         em = discord.Embed(description=randlist)
         await msg.channel.send(str(randsum), embed=em)
 
-# ショー君
+# ショー君URL送信
 async def VoiceTextShowKun(msg):
-    pattern = r"^/(show|haruka|hikari|takeru|santa|bear)kun(\s+)(.+)"
-    matchOB = re.match(pattern, msg.content, re.IGNORECASE)
+    matchOB = re.match(showkunPattern, msg.content, re.IGNORECASE)
     if matchOB:
+        global showkun
+        if msg.guild.id not in showkun:
+            return
+        vcshowkun = showkun[msg.guild.id]
         text = matchOB.group(3)
-        print(text)
-        if(len(text) > 200):
-            await msg.channel.send("200文字以下にしてください")
+        sp = matchOB.group(1)
+        name = await vcshowkun.GetShowkunDataPath(text, msg.channel.send, sp=sp)
+        if name != '':
+            await msg.channel.send(df["VoiceTextAPI"]["server_url"].replace("<name>", name))
         else:
-            await ShowkunBasic(msg.channel.send, urllib.parse.quote(text, encoding='utf-8'))
+            await msg.channel.send("音声ファイル生成失敗")
 
-# ショー君 API + Basic認証
-async def ShowkunBasic(fnSend, t, sp="show", fm="mp3"):
-    url = "https://api.voicetext.jp/v1/tts"
-    text = "text=" + t
-    speak = "speaker=" + sp
-    fmat = "format=" + fm
 
-    url += "?" + text + "&" + speak + "&" + fmat
-    print(url)
-    res = await BasicReq(df['VoiceTextAPI']['token'], "", url, fnSend)
-    if res != b'':
-        await ShowkunSaveEnc(fnSend, res)
+# ショー君VoiceChat参加読み上げ機能
+async def ShowkunVoicechat(msg):
+    # VC参加していない時、VC参加リクエスト文字列を待機
+    global showkun
+    if msg.guild.id not in showkun:
+        return
+    #vcshowkun = showkun[msg.guild.id]
+    matchConOB = re.match(vcPattern, msg.content, re.IGNORECASE)
+    if not showkun[msg.guild.id].is_ready_vc():
+        #print(msg.content)
+        if (matchConOB):
+            if(msg.author.voice):
+                # VC参加リクエストメッセージ送信者がVCにいるかどうか
+                # チャンネルリスト作成    
+                text = matchConOB.group(3).split(" ")
+                channellist = tuple(map(lambda x: int(x[2:-1]),filter(lambda c: len(c) > 1 and c[1] == '#', text)))
+                if await showkun[msg.guild.id].connect_vc(msg, channellist):
+                    msg.channel.send("ボイスチャット接続に失敗しました。")
+            else:
+                #print("you are not in VC")
+                await msg.channel.send("VC接続コマンド使用者がボイスチャンネルにいる必要があります。")
 
-# ショー君 wave file 保存+エンコ(+日時削除)
-async def ShowkunSaveEnc(fnSend, res):
-    name = uniqueName(2)
-    print(f"name: {name}")
-    fname = df["VoiceTextAPI"]["dir"]
-    mp3name = fname + name + ".mp3"
-    # fname += name +".wav"
-    with open(mp3name, mode="wb") as fmp3:
-        fmp3.write(res)
-
-    await ShowkunSendURL(fnSend, name)
-
-# ショー君 wave file URL送信
-async def ShowkunSendURL(fnSend, name):
-    url = df["VoiceTextAPI"]["server_url"].replace("<name>", name)
-    ## 自動削除タスクを追加
-    # autorm(name)
-
-    await fnSend(url)
-
-# ユニークネーム設定
-def uniqueName(num):
-    name = randomname(num)
-    sqlc.execute(f"SELECT * FROM {sqltable} where name='{name}'")
-    fetchone = sqlc.fetchone()
-    date = int(datetime.datetime.now().timestamp())
-    if fetchone:
-        if date > fetchone[1] + 60 * 60 * 24 * 7:
-            long_ = 1 if num == 3 else 0
-            sqlc.execute(f"UPDATE {sqltable} SET date = {date} WHERE name = '{name}'")
-            sql.commit()
-            return name
-
-        uniqueName(num)
+    # VC参加時
     else:
-        long_ = 1 if num == 3 else 0
-        sqlc.execute(f"INSERT INTO {sqltable} VALUES ('{name}', {date}, {long_})")
-        sql.commit()
-        return name
-
-# カウントダウン
-#async def CountDown(msg):
-#    pattern = r"^カウントダウン"
-#    matchOB = re.search(pattern, msg.content, re.IGNORECASE)
-#if matchOB:
-#        for i in range(10000):
-#            await msg.author.send(str(10000 - i))
-#            await asyncio.sleep(10)
+        if showkun[msg.guild.id].is_limit_time() > 0:
+            await showkun[msg.guild.id].disconnect_vc()
+        if(matchConOB):
+            await msg.channel.send("すでに通話中です。")
+        # 登録チャンネル判定
+        elif(msg.channel.id in showkun[msg.guild.id].read_channels):
+            # VC離脱リクエスト文字列を待機
+            matchDisOB = re.match(vcdPattern, msg.content, re.IGNORECASE)
+            if matchDisOB:
+                await showkun[msg.guild.id].disconnect_vc()
+            else:
+                # bot自身以外
+                if(msg.author != client.user):
+                    #await msg.channel.send("This is test:" + msg.content)
+                    await showkun[msg.guild.id].play(msg)
 
 # 鏡を借りる
 async def Kagami(msg):
@@ -542,6 +719,27 @@ def chRead(server, board, thread):
 
     print(dat)
 
+
+# ユニークネーム設定　
+# SQLに登録し、重複チェック
+def uniqueName(num):
+    name = randomname(num)
+    sqlc.execute(f"SELECT * FROM {sqltable} where name='{name}'")
+    fetchone = sqlc.fetchone()
+    date = int(datetime.datetime.now().timestamp())
+    if fetchone:
+        if date > fetchone[1] + 60 * 60 * 24 * 7:
+            long_ = 1 if num == 3 else 0
+            sqlc.execute(f"UPDATE {sqltable} SET date = {date} WHERE name = '{name}'")
+            sql.commit()
+            return name
+
+        uniqueName(num)
+    else:
+        long_ = 1 if num == 3 else 0
+        sqlc.execute(f"INSERT INTO {sqltable} VALUES ('{name}', {date}, {long_})")
+        sql.commit()
+        return name
 
 ###################################
 # Basic認証

@@ -118,13 +118,14 @@ class VoiceTextWebAPI:
         if self.vclient is not None :
             return -1
         try:
-            self.vclient = await msg.author.voice.channel.connect()
+            vchannel = msg.author.voice.channel
+            self.vclient = await vchannel.connect()
         except discord.ClientException as e:
-            msg.channel.send("ボイスチャンネルへの接続に失敗しました。ボイスチャンネルへの参加が可能か、設定を見直してください。")
+            await msg.channel.send("ボイスチャンネルへの接続に失敗しました。ボイスチャンネルへの参加が可能か、設定を見直してください。")
             print(e)
             return
         except:
-            msg.channel.send("ボイスチャンネルへの接続に失敗しました。ボイスチャンネルへの参加が可能か、設定を見直してください。")
+            await msg.channel.send("ボイスチャンネルへの接続に失敗しました。ボイスチャンネルへの参加が可能か、設定を見直してください。")
             return
         self.read_channels = read_channels
         self.text_channels = dict(map(lambda x: [int(x.id), x.name], msg.guild.text_channels))
@@ -424,8 +425,10 @@ async def DiceRoll(msg):
 async def VoiceTextShowKun(msg):
     matchOB = re.match(showkunPattern, msg.content, re.IGNORECASE)
     if matchOB:
+        if msg.guild is None:
+            return
         global showkun
-        if msg.guild.id not in showkun:
+        if msg.guild.id not in showkun.keys():
             return
         vcshowkun = showkun[msg.guild.id]
         text = matchOB.group(3)
@@ -440,8 +443,10 @@ async def VoiceTextShowKun(msg):
 # ショー君VoiceChat参加読み上げ機能
 async def ShowkunVoicechat(msg):
     # VC参加していない時、VC参加リクエスト文字列を待機
+    if msg.guild is None:
+        return
     global showkun
-    if msg.guild.id not in showkun:
+    if msg.guild.id not in showkun.keys():
         return
     #vcshowkun = showkun[msg.guild.id]
     matchConOB = re.match(vcPattern, msg.content, re.IGNORECASE)

@@ -5,6 +5,7 @@ copy.sh
 *.json
 *.sqlite3
 .vscode/
+.history/
 
 # Windows thumbnail cache files
 Thumbs.db

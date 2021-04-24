@@ -385,10 +385,9 @@ async def SteamLink(msg):
     # steamURL が発言されたら steam:// でURLを返す処理
     matchOB = re.match(steamPattern, msg.content, re.IGNORECASE)
     if matchOB:
-        reply = 'steam://openurl/' + "<" + matchOB.group() + ">"
-        #em = discord.Embed()
-        #await msg.channel.send(reply, embed=em)
-        await msg.channel.send(reply)
+        reply = 'steam://openurl/' + matchOB.group()
+        em = discord.Embed(description=reply)
+        await msg.channel.send("", embed=em)
 
 # サイコロ
 async def DiceRoll(msg):
